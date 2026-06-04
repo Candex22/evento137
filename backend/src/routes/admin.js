@@ -1,0 +1,39 @@
+const express = require('express');
+const router = express.Router();
+const { requireAuth, requireAdmin } = require('../middleware/auth');
+const {
+  getPendientes,
+  countPendientes,
+  aprobarUsuario,
+  rechazarUsuario,
+  getUsuarios,
+  activarUsuario,
+  desactivarUsuario,
+  eliminarUsuario,
+  getUsuariosParaRoles,
+  cambiarRol,
+
+} = require('../controllers/usersController');
+const { getMovimientos } = require('../controllers/stockController');
+const { historialAdmin } = require('../controllers/pedidoController');
+
+router.use(requireAuth, requireAdmin);
+
+router.get('/pendientes', getPendientes);
+router.get('/pendientes/count', countPendientes);
+router.post('/pendientes/:id/aprobar', aprobarUsuario);
+router.delete('/pendientes/:id', rechazarUsuario);
+
+router.get('/usuarios', getUsuarios);
+router.patch('/usuarios/:id/activar', activarUsuario);
+router.patch('/usuarios/:id/desactivar', desactivarUsuario);
+router.delete('/usuarios/:id', eliminarUsuario);
+
+router.get('/roles', getUsuariosParaRoles);
+router.patch('/roles/:id', cambiarRol); 
+
+router.get('/movimientos', getMovimientos);
+
+router.get('/pedidos', historialAdmin);   // historial completo de pedidos resueltos
+
+module.exports = router;

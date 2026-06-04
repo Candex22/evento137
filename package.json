@@ -1,0 +1,16 @@
+{
+  "name": "evento",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev:back": "npm run dev -w panol-api",
+    "dev:front": "npm run dev -w panol-frontend",
+    "dev": "concurrently \"npm:dev:back\" \"npm:dev:front\""
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.3"
+  }
+}
