@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import AdminLayout from '../components/layout/AdminLayout'
+import AdminLayout from '../components/layout/adminlayout'
 import { getHistorialPedidos, countPendientes } from '../api/admin'
-import { useToast, ToastContainer } from '../hooks/useToast'
+import { useToast, ToastContainer } from '../hooks/usetoast'
 
 const ESTADO_BADGE = { confirmado: 'badge-active', rechazado: 'badge-inactive' }
 const ESTADO_LABEL = { confirmado: 'aceptado', rechazado: 'rechazado' }

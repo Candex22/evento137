@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
-import PanelLayout from '../components/layout/PanelLayout'
+import PanelLayout from '../components/layout/panellayout'
 import { getProductos, crearIngreso } from '../api/buffet'
-import { useToast, ToastContainer } from '../hooks/useToast'
+import { useToast, ToastContainer } from '../hooks/usetoast'
 
 const NAV = [
   { to: '/buffet', label: 'Stock', icon: '▦', end: true },

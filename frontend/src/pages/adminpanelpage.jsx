@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import AdminLayout from '../components/layout/AdminLayout'
+import AdminLayout from '../components/layout/adminlayout'
 import { countPendientes } from '../api/admin'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '../context/authcontext'
 
 export default function AdminPanelPage() {
   const { user } = useAuth()

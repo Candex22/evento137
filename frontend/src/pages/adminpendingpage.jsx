@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import AdminLayout from '../components/layout/AdminLayout'
+import AdminLayout from '../components/layout/adminlayout'
 import { getPendientes, aprobarUsuario, rechazarUsuario, countPendientes } from '../api/admin'
-import { useToast, ToastContainer } from '../hooks/useToast'
+import { useToast, ToastContainer } from '../hooks/usetoast'
 
 export default function AdminPendingPage() {
   const [users, setUsers]         = useState([])

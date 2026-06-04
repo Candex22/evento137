@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
-import PanelLayout from '../components/layout/PanelLayout'
+import PanelLayout from '../components/layout/panellayout'
 import { getProductos, crearPedido, misPedidos } from '../api/mozo'
-import { useToast, ToastContainer } from '../hooks/useToast'
+import { useToast, ToastContainer } from '../hooks/usetoast'
 
 const NAV = [
   { to: '/mozo', label: 'Pedidos', icon: '▦', end: true },

@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
-import PanelLayout from '../components/layout/PanelLayout'
+import PanelLayout from '../components/layout/panellayout'
 import { pedidosPendientes, confirmarPedido, rechazarPedido, getProductos, actualizarPrecio, getHistorial, porCobrar, marcarPagado } from '../api/cajero'
-import { useToast, ToastContainer } from '../hooks/useToast'
+import { useToast, ToastContainer } from '../hooks/usetoast'
 
 const NAV = [
   { to: '/cajero', label: 'Pedidos', icon: '▦', end: true },

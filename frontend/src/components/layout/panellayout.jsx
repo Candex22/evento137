@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { useAuth } from '../../context/AuthContext'
+import { useAuth } from '../../context/authcontext'
 
 export default function PanelLayout({ children, nav = [], brandSub = '' }) {
   const { user, logout } = useAuth()

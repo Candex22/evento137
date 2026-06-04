@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import AdminLayout from '../components/layout/AdminLayout'
+import AdminLayout from '../components/layout/adminlayout'
 import { getEstado, getLista } from '../api/entradas'
 import { countPendientes } from '../api/admin'
-import { useToast, ToastContainer } from '../hooks/useToast'
+import { useToast, ToastContainer } from '../hooks/usetoast'
 
 function fmtHora(iso) {
   if (!iso) return '—'
