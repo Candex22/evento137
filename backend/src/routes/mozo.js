@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { requireRole } = require('../middleware/auth');
-const { getProductos } = require('../controllers/stockController');
-const { crearPedido, misPedidos } = require('../controllers/pedidoController');
+const { getProductos } = require('../controllers/stockcontroller');
+const { crearPedido, misPedidos } = require('../controllers/pedidocontroller');
 
 router.use(requireRole('mozo', 'administrador'));
 

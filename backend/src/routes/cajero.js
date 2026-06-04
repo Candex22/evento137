@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { requireRole } = require('../middleware/auth');
-const { pedidosPendientes, confirmarPedido, rechazarPedido, historialCajero, porCobrar, marcarPagado } = require('../controllers/pedidoController');
-const { getProductos, actualizarPrecio } = require('../controllers/stockController');
+const { pedidosPendientes, confirmarPedido, rechazarPedido, historialCajero, porCobrar, marcarPagado } = require('../controllers/pedidocontroller');
+const { getProductos, actualizarPrecio } = require('../controllers/stockcontroller');
 
 router.use(requireRole('cajero', 'administrador'));
 

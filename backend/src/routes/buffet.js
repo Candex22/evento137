@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { requireRole } = require('../middleware/auth');
-const { getProductos, crearIngreso } = require('../controllers/stockController');
+const { getProductos, crearIngreso } = require('../controllers/stockcontroller');
 
 router.use(requireRole('buffet', 'administrador'));
 

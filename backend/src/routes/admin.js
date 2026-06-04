@@ -13,9 +13,9 @@ const {
   getUsuariosParaRoles,
   cambiarRol,
 
-} = require('../controllers/usersController');
-const { getMovimientos } = require('../controllers/stockController');
-const { historialAdmin } = require('../controllers/pedidoController');
+} = require('../controllers/userscontroller');
+const { getMovimientos } = require('../controllers/stockcontroller');
+const { historialAdmin } = require('../controllers/pedidocontroller');
 
 router.use(requireAuth, requireAdmin);
 
