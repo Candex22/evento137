@@ -1,12 +1,19 @@
 const express = require('express');
 const router = express.Router();
 const { requireRole } = require('../middleware/auth');
-const { getProductos, crearIngreso, ajustarStock } = require('../controllers/stockcontroller');
+const {
+  getProductos, crearProducto, agregarGusto,
+  cargarStock, ajustarStock, ajustarGusto, actualizarPrecio,
+} = require('../controllers/stockcontroller');
 
-router.use(requireRole('buffet', 'admin'));
+router.use(requireRole('buffet', 'administrador'));
 
 router.get('/productos', getProductos);
-router.post('/ingresos', crearIngreso);
+router.post('/productos', crearProducto);
+router.post('/productos/:id/gustos', agregarGusto);
+router.post('/ingresos', cargarStock);
 router.patch('/productos/:id/ajustar', ajustarStock);
+router.patch('/gustos/:id/ajustar', ajustarGusto);
+router.patch('/productos/:id/precio', actualizarPrecio);
 
 module.exports = router;

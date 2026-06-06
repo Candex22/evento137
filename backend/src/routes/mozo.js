@@ -4,9 +4,9 @@ const { requireRole } = require('../middleware/auth');
 const { getProductos } = require('../controllers/stockcontroller');
 const { crearPedido, misPedidos } = require('../controllers/pedidocontroller');
 
-router.use(requireRole('mozo', 'administrador'));
+router.use(requireRole('mozo', 'admin'));
 
-router.get('/productos', getProductos);   // ve el stock para armar el pedido
+router.get('/productos', getProductos);
 router.post('/pedidos', crearPedido);
 router.get('/pedidos', misPedidos);
 
