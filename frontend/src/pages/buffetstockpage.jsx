@@ -3,7 +3,7 @@ import PanelLayout from '../components/layout/panellayout'
 import {
   getProductos, crearProducto, agregarGusto, cargarStock, ajustarProducto, ajustarGusto,
 } from '../api/buffet'
-import { useToast, ToastContainer } from '../hooks/useToast'
+import { useToast, ToastContainer } from '../hooks/usetoast'
 
 const NAV = [{ to: '/buffet', label: 'Stock', icon: '▦', end: true }]
 
