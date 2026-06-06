@@ -6,8 +6,13 @@ const pool = require('../config/db');
 async function crearPedido(req, res) {
   const nombre = (req.body.nombre || '').trim();
   const items = Array.isArray(req.body.items) ? req.body.items : [];
+  const metodo = req.body.metodo_pago;                       // NUEVO
+  const recibidoRaw = req.body.recibido;                     // NUEVO
   if (!nombre) return res.status(400).json({ error: 'El nombre del pedido es obligatorio.' });
   if (items.length === 0) return res.status(400).json({ error: 'Agregá al menos un producto.' });
+  if (!['efectivo', 'transferencia'].includes(metodo)) {     // NUEVO
+    return res.status(400).json({ error: 'Elegí un método de pago.' });
+  }
 
   const client = await pool.connect();
   try {
@@ -15,11 +20,11 @@ async function crearPedido(req, res) {
 
     const faltantes = [];
     const aDescontar = [];
+    let total = 0;                                            // NUEVO
 
     for (const raw of items) {
       const id_producto = parseInt(raw.id_producto, 10);
       if (isNaN(id_producto)) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Producto inválido.' }); }
-
       const prod = await client.query(
         'SELECT id_producto, nombre, precio, tiene_gustos, stock FROM producto WHERE id_producto = $1 FOR UPDATE',
         [id_producto]
@@ -32,28 +37,25 @@ async function crearPedido(req, res) {
           .map(g => ({ id_gusto: parseInt(g.id_gusto, 10), cantidad: parseInt(g.cantidad, 10) }))
           .filter(g => !isNaN(g.id_gusto) && !isNaN(g.cantidad) && g.cantidad > 0);
         if (gustos.length === 0) { await client.query('ROLLBACK'); return res.status(400).json({ error: `Elegí gustos para "${P.nombre}".` }); }
-
         const totalGustos = gustos.reduce((s, g) => s + g.cantidad, 0);
         const totalItem = parseInt(raw.cantidad, 10);
         if (!isNaN(totalItem) && totalItem !== totalGustos) {
           await client.query('ROLLBACK');
           return res.status(400).json({ error: `Los gustos de "${P.nombre}" deben sumar ${totalItem}.` });
         }
-
         for (const g of gustos) {
-          const gr = await client.query(
-            'SELECT nombre, stock FROM gusto WHERE id_gusto = $1 AND id_producto = $2 FOR UPDATE',
-            [g.id_gusto, id_producto]
-          );
+          const gr = await client.query('SELECT nombre, stock FROM gusto WHERE id_gusto = $1 AND id_producto = $2 FOR UPDATE', [g.id_gusto, id_producto]);
           if (gr.rowCount === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Gusto inválido.' }); }
           if (g.cantidad > gr.rows[0].stock) faltantes.push(`${P.nombre} - ${gr.rows[0].nombre} (pide ${g.cantidad}, hay ${gr.rows[0].stock})`);
           aDescontar.push({ id_producto, id_gusto: g.id_gusto, cantidad: g.cantidad, precio: P.precio });
+          total += g.cantidad * Number(P.precio);             // NUEVO
         }
       } else {
         const cantidad = parseInt(raw.cantidad, 10);
         if (isNaN(cantidad) || cantidad <= 0) { await client.query('ROLLBACK'); return res.status(400).json({ error: `Cantidad inválida para "${P.nombre}".` }); }
         if (cantidad > P.stock) faltantes.push(`${P.nombre} (pide ${cantidad}, hay ${P.stock})`);
         aDescontar.push({ id_producto, id_gusto: null, cantidad, precio: P.precio });
+        total += cantidad * Number(P.precio);                 // NUEVO
       }
     }
 
@@ -62,9 +64,21 @@ async function crearPedido(req, res) {
       return res.status(409).json({ error: `Sin stock, pedido cancelado: ${faltantes.join(', ')}.` });
     }
 
+    // NUEVO: validar lo recibido si es efectivo
+    let recibido = null;
+    if (metodo === 'efectivo') {
+      recibido = Number(recibidoRaw);
+      if (isNaN(recibido) || recibido < total) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: `Lo recibido ($${recibido || 0}) es menor al total ($${total}).` });
+      }
+    }
+
+    // NUEVO: guardamos metodo_pago y recibido
     const ped = await client.query(
-      `INSERT INTO pedido (nombre, id_mozo, estado, resolved_at) VALUES ($1, $2, 'confirmado', NOW()) RETURNING id_pedido`,
-      [nombre, req.session.id_usuario]
+      `INSERT INTO pedido (nombre, id_mozo, estado, resolved_at, metodo_pago, recibido)
+       VALUES ($1, $2, 'confirmado', NOW(), $3, $4) RETURNING id_pedido`,
+      [nombre, req.session.id_usuario, metodo, recibido]
     );
     const id_pedido = ped.rows[0].id_pedido;
 
@@ -128,7 +142,7 @@ async function misPedidos(req, res) {
 async function porCobrar(req, res) {
   try {
     const r = await pool.query(
-      `SELECT p.id_pedido, p.nombre, p.created_at,
+      `SELECT p.id_pedido, p.nombre, p.created_at, p.metodo_pago, p.recibido,
               u.nombre AS mozo_nombre, u.apellido AS mozo_apellido, ${ITEMS_JSON}
        FROM pedido p
        JOIN usuario u ON u.id_user = p.id_mozo
@@ -148,12 +162,18 @@ async function porCobrar(req, res) {
 
 async function marcarPagado(req, res) {
   const id = parseInt(req.params.id, 10);
+  const metodo = req.body.metodo_pago;   // opcional: el cajero puede corregirlo
   if (isNaN(id)) return res.status(400).json({ error: 'ID inválido.' });
+  if (metodo && !['efectivo', 'transferencia'].includes(metodo)) {
+    return res.status(400).json({ error: 'Método de pago inválido.' });
+  }
   try {
     const r = await pool.query(
-      `UPDATE pedido SET pagado = TRUE, pagado_at = NOW(), id_cajero = $1
-       WHERE id_pedido = $2 AND estado = 'confirmado' AND pagado = FALSE RETURNING id_pedido`,
-      [req.session.id_usuario, id]
+      `UPDATE pedido
+         SET pagado = TRUE, pagado_at = NOW(), id_cajero = $1,
+             metodo_pago = COALESCE($2, metodo_pago)
+       WHERE id_pedido = $3 AND estado = 'confirmado' AND pagado = FALSE RETURNING id_pedido`,
+      [req.session.id_usuario, metodo || null, id]
     );
     if (r.rowCount === 0) return res.status(409).json({ error: 'El pedido no está para cobrar (no existe o ya está pagado).' });
     res.json({ message: 'Pago registrado.' });
