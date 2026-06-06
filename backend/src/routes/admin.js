@@ -14,7 +14,7 @@ const {
   cambiarRol,
 
 } = require('../controllers/userscontroller');
-const { getMovimientos } = require('../controllers/stockcontroller');
+const { getMovimientos, getProductosAdmin } = require('../controllers/stockcontroller');
 const { historialAdmin } = require('../controllers/pedidocontroller');
 
 router.use(requireAuth, requireAdmin);
@@ -35,5 +35,6 @@ router.patch('/roles/:id', cambiarRol);
 router.get('/movimientos', getMovimientos);
 
 router.get('/pedidos', historialAdmin);   // historial completo de pedidos resueltos
+router.get('/productos', getProductosAdmin);
 
 module.exports = router;

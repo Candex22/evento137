@@ -13,6 +13,18 @@ async function getProductos(req, res) {
   }
 }
 
+async function getProductosAdmin(req, res) {
+  try {
+    const result = await pool.query(
+      'SELECT id_producto, nombre, stock, total_ingresado FROM producto ORDER BY nombre ASC'
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error al listar productos (admin):', err);
+    res.status(500).json({ error: 'Error interno del servidor.' });
+  }
+}
+
 // POST /api/buffet/ingresos — carga un ingreso de stock
 // Si el producto existe (mismo nombre, sin importar mayúsculas) suma; si no, lo crea.
 // Registra el movimiento en el historial. Todo dentro de una transacción.
