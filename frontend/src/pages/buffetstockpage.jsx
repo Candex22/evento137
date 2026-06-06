@@ -1,101 +1,62 @@
-import { useEffect, useState, useRef } from 'react'
-import PanelLayout from '../components/layout/panellayout'
-import { getProductos, crearIngreso, ajustarStock } from '../api/buffet'
-import { useToast, ToastContainer } from '../hooks/usetoast'
+import { useEffect, useState } from 'react'
+import PanelLayout from '../components/layout/PanelLayout'
+import {
+  getProductos, crearProducto, agregarGusto, cargarStock, ajustarProducto, ajustarGusto,
+} from '../api/buffet'
+import { useToast, ToastContainer } from '../hooks/useToast'
 
-const NAV = [
-  { to: '/buffet', label: 'Stock', icon: '▦', end: true },
-]
+const NAV = [{ to: '/buffet', label: 'Stock', icon: '▦', end: true }]
 
 export default function BuffetStockPage() {
   const [productos, setProductos] = useState([])
-  const [loading, setLoading]     = useState(true)
-  const [nombre, setNombre]       = useState('')
-  const [cantidad, setCantidad]   = useState('')
-  const [saving, setSaving]       = useState(false)
-  const [showSug, setShowSug]     = useState(false)
-  const [adjustingId, setAdjustingId] = useState(null)
-  const { toasts, toast }         = useToast()
-  const boxRef = useRef(null)
+  const [loading, setLoading] = useState(true)
+  const [np, setNp] = useState({ nombre: '', precio: '', tiene_gustos: false })
+  const [cargas, setCargas] = useState({})      // { 'p3': '10', 'g5': '20' }
+  const [gustoForm, setGustoForm] = useState({}) // { [id_producto]: { nombre, stock } }
+  const { toasts, toast } = useToast()
 
   const load = async () => {
-    try {
-      setProductos(await getProductos())
-    } catch {
-      toast.error('No se pudieron cargar los datos.')
-    } finally {
-      setLoading(false)
-    }
+    try { setProductos(await getProductos()) }
+    catch { toast.error('No se pudo cargar el stock.') }
+    finally { setLoading(false) }
   }
-
   useEffect(() => { load() }, [])
 
-  // Cierra el desplegable al hacer click afuera
-  useEffect(() => {
-    const onClick = (e) => {
-      if (boxRef.current && !boxRef.current.contains(e.target)) setShowSug(false)
-    }
-    document.addEventListener('mousedown', onClick)
-    return () => document.removeEventListener('mousedown', onClick)
-  }, [])
-
-  // Coincidencias segun lo que se escribe (sin importar mayusculas)
-  const q = nombre.trim().toLowerCase()
-  const sugerencias = q
-    ? productos.filter(p => p.nombre.toLowerCase().includes(q)).slice(0, 6)
-    : []
-
-  const elegir = (p) => {
-    setNombre(p.nombre)
-    setShowSug(false)
-  }
-
-  const onSubmit = async (e) => {
-    e.preventDefault()
-    const cant = parseInt(cantidad, 10)
-    if (!nombre.trim()) return toast.error('Ingresá el nombre del producto.')
-    if (isNaN(cant) || cant <= 0) return toast.error('La cantidad debe ser mayor a 0.')
-
-    setSaving(true)
+  const onCrear = async () => {
+    if (!np.nombre.trim()) return toast.error('Poné un nombre.')
     try {
-      const res = await crearIngreso(nombre.trim(), cant)
+      const res = await crearProducto(np.nombre.trim(), Number(np.precio) || 0, np.tiene_gustos)
       toast.success(res.message)
-      setNombre('')
-      setCantidad('')
+      setNp({ nombre: '', precio: '', tiene_gustos: false })
       await load()
-    } catch (err) {
-      toast.error(err.message)
-    } finally {
-      setSaving(false)
-    }
+    } catch (err) { toast.error(err.message) }
   }
 
-  const ajustar = async (p, delta) => {
-    if (adjustingId) return
-    if (delta < 0 && p.stock <= 0) return
-    setAdjustingId(p.id_producto)
-    // Actualización optimista para que la flechita responda al toque
-    setProductos(prev => prev.map(x =>
-      x.id_producto === p.id_producto
-        ? {
-            ...x,
-            stock: x.stock + delta,
-            total_ingresado: delta > 0 ? x.total_ingresado + delta : x.total_ingresado,
-          }
-        : x
-    ))
+  const onCargar = async (payload, key) => {
+    const cantidad = parseInt(cargas[key], 10)
+    if (isNaN(cantidad) || cantidad <= 0) return toast.error('Cantidad inválida.')
     try {
-      const res = await ajustarStock(p.id_producto, delta)
-      // Reconcilia con lo que devuelve el servidor
-      setProductos(prev => prev.map(x =>
-        x.id_producto === p.id_producto ? { ...x, ...res.producto } : x
-      ))
-    } catch (err) {
-      toast.error(err.message)
+      const res = await cargarStock({ ...payload, cantidad })
+      toast.success(res.message)
+      setCargas(c => ({ ...c, [key]: '' }))
       await load()
-    } finally {
-      setAdjustingId(null)
-    }
+    } catch (err) { toast.error(err.message) }
+  }
+
+  const onAgregarGusto = async (idProd) => {
+    const f = gustoForm[idProd] || {}
+    if (!f.nombre?.trim()) return toast.error('Poné el nombre del gusto.')
+    try {
+      const res = await agregarGusto(idProd, f.nombre.trim(), parseInt(f.stock, 10) || 0)
+      toast.success(res.message)
+      setGustoForm(g => ({ ...g, [idProd]: { nombre: '', stock: '' } }))
+      await load()
+    } catch (err) { toast.error(err.message) }
+  }
+
+  const onAjustar = async (fn, id, delta) => {
+    try { await fn(id, delta); await load() }
+    catch (err) { toast.error(err.message) }
   }
 
   return (
@@ -104,138 +65,114 @@ export default function BuffetStockPage() {
 
       <div style={styles.header}>
         <h1 style={styles.title}>Stock</h1>
-        <p style={styles.sub}>Cargá ingresos de productos al inventario</p>
+        <p style={styles.sub}>Creá productos y cargá su stock</p>
       </div>
 
-      {/* Formulario de carga */}
+      {/* Nuevo producto */}
       <div className="card" style={{ marginBottom: 28 }}>
-        <form onSubmit={onSubmit} style={styles.form}>
-          <div style={styles.fieldGrow} ref={boxRef}>
-            <label style={styles.label}>Producto</label>
-            <input
-              type="text"
-              value={nombre}
-              onChange={e => { setNombre(e.target.value); setShowSug(true) }}
-              onFocus={() => setShowSug(true)}
-              placeholder="Ej. Hamburguesa"
-              disabled={saving}
-              autoComplete="off"
-            />
-            {showSug && sugerencias.length > 0 && (
-              <ul style={styles.sugList}>
-                {sugerencias.map(p => (
-                  <li
-                    key={p.id_producto}
-                    onClick={() => elegir(p)}
-                    style={styles.sugItem}
-                    onMouseDown={e => e.preventDefault()}
-                  >
-                    <span>{p.nombre}</span>
-                    <span style={styles.sugStock}>{p.stock}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
+        <h2 style={styles.sectionTitle}>Nuevo producto</h2>
+        <div style={styles.formRow}>
+          <div style={{ flex: '1 1 200px' }}>
+            <label style={styles.label}>Nombre</label>
+            <input value={np.nombre} onChange={e => setNp({ ...np, nombre: e.target.value })} placeholder="Ej. Empanada" />
           </div>
-          <div style={styles.fieldQty}>
-            <label style={styles.label}>Cantidad</label>
-            <input
-              type="number"
-              min="1"
-              value={cantidad}
-              onChange={e => setCantidad(e.target.value)}
-              placeholder="0"
-              disabled={saving}
-            />
+          <div style={{ width: 120 }}>
+            <label style={styles.label}>Precio</label>
+            <input type="number" min="0" value={np.precio} onChange={e => setNp({ ...np, precio: e.target.value })} placeholder="0" />
           </div>
-          <button type="submit" className="btn btn-primary" disabled={saving} style={{ alignSelf: 'flex-end' }}>
-            {saving ? <span className="spinner" /> : 'Cargar ingreso'}
-          </button>
-        </form>
-        <p style={styles.hint}>Si el producto ya existe, se suma a su stock actual. Usá las flechitas para ajustar de a uno.</p>
+          <label style={styles.check}>
+            <input type="checkbox" checked={np.tiene_gustos} onChange={e => setNp({ ...np, tiene_gustos: e.target.checked })} />
+            Tiene gustos
+          </label>
+          <button className="btn btn-primary" onClick={onCrear} style={{ alignSelf: 'flex-end' }}>Crear</button>
+        </div>
+        <p style={styles.hint}>Si tiene gustos, después le agregás los gustos abajo y el stock se carga por gusto.</p>
       </div>
 
       {loading ? (
         <div style={styles.loading}><span className="spinner" /> Cargando…</div>
       ) : productos.length === 0 ? (
-        <div className="empty-state"><div className="icon">▦</div><h3>Sin productos</h3><p>Cargá tu primer ingreso arriba.</p></div>
+        <div className="empty-state"><div className="icon">▦</div><h3>Sin productos</h3><p>Creá el primero arriba.</p></div>
       ) : (
-        <section>
-          <h2 style={styles.sectionTitle}>Stock actual</h2>
-          <div className="card" style={{ padding: 0 }}>
-            <div className="table-wrap">
-              <table>
-                <thead><tr><th>Producto</th><th style={{ textAlign: 'center' }}>Stock</th><th style={{ textAlign: 'right' }}>Ajustar</th></tr></thead>
-                <tbody>
-                  {productos.map(p => (
-                    <tr key={p.id_producto}>
-                      <td><strong>{p.nombre}</strong></td>
-                      <td style={{ textAlign: 'center' }}>
-                        <span style={styles.stockNum}>{p.stock}</span>
-                        <span style={styles.stockTotal}>/{p.total_ingresado}</span>
-                      </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <div style={styles.arrows}>
-                          <button
-                            type="button"
-                            style={{ ...styles.arrowBtn, ...((p.stock <= 0 || adjustingId === p.id_producto) ? styles.arrowDisabled : {}) }}
-                            onClick={() => ajustar(p, -1)}
-                            disabled={p.stock <= 0 || adjustingId === p.id_producto}
-                            aria-label={`Bajar stock de ${p.nombre}`}
-                            title="Bajar 1"
-                          >▾</button>
-                          <button
-                            type="button"
-                            style={{ ...styles.arrowBtn, ...(adjustingId === p.id_producto ? styles.arrowDisabled : {}) }}
-                            onClick={() => ajustar(p, +1)}
-                            disabled={adjustingId === p.id_producto}
-                            aria-label={`Subir stock de ${p.nombre}`}
-                            title="Subir 1"
-                          >▴</button>
-                        </div>
-                      </td>
-                    </tr>
+        <div style={styles.list}>
+          {productos.map(p => (
+            <div key={p.id_producto} className="card" style={styles.prodCard}>
+              <div style={styles.prodHead}>
+                <div>
+                  <span style={styles.prodNombre}>{p.nombre}</span>
+                  <span style={styles.prodPrecio}>${p.precio}</span>
+                </div>
+                <span style={styles.prodStock}>{p.stock} <span style={styles.u}>en stock</span></span>
+              </div>
+
+              {p.tiene_gustos ? (
+                <div style={styles.gustos}>
+                  {p.gustos.map(g => (
+                    <div key={g.id_gusto} style={styles.gustoRow}>
+                      <span style={styles.gustoNombre}>{g.nombre}</span>
+                      <div style={styles.gustoCtrl}>
+                        <button className="btn btn-ghost btn-sm" onClick={() => onAjustar(ajustarGusto, g.id_gusto, -1)}>−</button>
+                        <span style={styles.gustoStock}>{g.stock}</span>
+                        <button className="btn btn-ghost btn-sm" onClick={() => onAjustar(ajustarGusto, g.id_gusto, 1)}>+</button>
+                        <input style={styles.miniInput} type="number" min="1" placeholder="cant."
+                          value={cargas[`g${g.id_gusto}`] ?? ''}
+                          onChange={e => setCargas(c => ({ ...c, [`g${g.id_gusto}`]: e.target.value }))} />
+                        <button className="btn btn-sm" onClick={() => onCargar({ id_gusto: g.id_gusto }, `g${g.id_gusto}`)}>Cargar</button>
+                      </div>
+                    </div>
                   ))}
-                </tbody>
-              </table>
+                  {/* Agregar gusto */}
+                  <div style={styles.addGusto}>
+                    <input style={{ flex: 1 }} placeholder="Nuevo gusto (ej. Carne)"
+                      value={gustoForm[p.id_producto]?.nombre ?? ''}
+                      onChange={e => setGustoForm(g => ({ ...g, [p.id_producto]: { ...g[p.id_producto], nombre: e.target.value } }))} />
+                    <input style={styles.miniInput} type="number" min="0" placeholder="stock"
+                      value={gustoForm[p.id_producto]?.stock ?? ''}
+                      onChange={e => setGustoForm(g => ({ ...g, [p.id_producto]: { ...g[p.id_producto], stock: e.target.value } }))} />
+                    <button className="btn btn-sm" onClick={() => onAgregarGusto(p.id_producto)}>+ Gusto</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={styles.sinGusto}>
+                  <button className="btn btn-ghost btn-sm" onClick={() => onAjustar(ajustarProducto, p.id_producto, -1)}>−</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => onAjustar(ajustarProducto, p.id_producto, 1)}>+</button>
+                  <input style={styles.miniInput} type="number" min="1" placeholder="cant."
+                    value={cargas[`p${p.id_producto}`] ?? ''}
+                    onChange={e => setCargas(c => ({ ...c, [`p${p.id_producto}`]: e.target.value }))} />
+                  <button className="btn btn-sm" onClick={() => onCargar({ id_producto: p.id_producto }, `p${p.id_producto}`)}>Cargar</button>
+                </div>
+              )}
             </div>
-          </div>
-        </section>
+          ))}
+        </div>
       )}
     </PanelLayout>
   )
 }
 
 const styles = {
-  header:    { marginBottom: 24 },
-  title:     { fontSize: 22, fontWeight: 600, color: '#f0ede8', marginBottom: 4 },
-  sub:       { fontSize: 13, color: '#5a5754' },
-  form:      { display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end' },
-  fieldGrow: { display: 'flex', flexDirection: 'column', gap: 6, flex: '1 1 220px', position: 'relative' },
-  fieldQty:  { display: 'flex', flexDirection: 'column', gap: 6, width: 120 },
-  label:     { fontSize: 12, color: '#9a9690', fontFamily: "'DM Mono', monospace" },
-  hint:      { fontSize: 12, color: '#5a5754', marginTop: 12 },
-  loading:   { display: 'flex', alignItems: 'center', gap: 10, color: '#5a5754', fontSize: 13, padding: 24 },
-  sectionTitle: { fontSize: 14, fontWeight: 600, color: '#f0ede8', marginBottom: 12 },
-  stockNum:  { fontFamily: "'DM Mono', monospace", fontSize: 15, fontWeight: 600, color: '#e89547' },
-  stockTotal:{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#5a5754' },
-  arrows:    { display: 'inline-flex', gap: 6, justifyContent: 'flex-end' },
-  arrowBtn:  {
-    width: 30, height: 30, lineHeight: '28px', textAlign: 'center',
-    background: '#181818', border: '1px solid #2e2e2e', borderRadius: 6,
-    color: '#f0ede8', fontSize: 14, cursor: 'pointer', padding: 0, userSelect: 'none',
-  },
-  arrowDisabled: { opacity: 0.4, cursor: 'not-allowed' },
-  sugList: {
-    position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20,
-    marginTop: 4, padding: 4, listStyle: 'none',
-    background: '#181818', border: '1px solid #2e2e2e', borderRadius: 8,
-    maxHeight: 220, overflowY: 'auto',
-    boxShadow: '0 8px 24px rgba(0,0,0,.4)',
-  },
-  sugItem: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    padding: '8px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13, color: '#f0ede8',
-  },
-  sugStock: { fontFamily: "'DM Mono', monospace", fontSize: 12, color: '#e89547' },
+  header: { marginBottom: 24 },
+  title: { fontSize: 22, fontWeight: 600, color: '#f0ede8', marginBottom: 4 },
+  sub: { fontSize: 13, color: '#5a5754' },
+  sectionTitle: { fontSize: 14, fontWeight: 600, color: '#f0ede8', marginBottom: 14 },
+  formRow: { display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end' },
+  label: { display: 'block', fontSize: 12, color: '#9a9690', fontFamily: "'DM Mono', monospace", marginBottom: 6 },
+  check: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#f0ede8', alignSelf: 'flex-end', paddingBottom: 8 },
+  hint: { fontSize: 12, color: '#5a5754', marginTop: 12 },
+  loading: { display: 'flex', alignItems: 'center', gap: 10, color: '#5a5754', fontSize: 13, padding: 24 },
+  list: { display: 'flex', flexDirection: 'column', gap: 14 },
+  prodCard: { display: 'flex', flexDirection: 'column', gap: 12 },
+  prodHead: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  prodNombre: { fontSize: 15, fontWeight: 600, color: '#f0ede8' },
+  prodPrecio: { fontSize: 13, color: '#9a9690', marginLeft: 10, fontFamily: "'DM Mono', monospace" },
+  prodStock: { fontSize: 18, fontWeight: 600, color: '#e8c547', fontFamily: "'DM Mono', monospace" },
+  u: { fontSize: 11, color: '#5a5754', fontWeight: 400 },
+  gustos: { display: 'flex', flexDirection: 'column', gap: 8, borderTop: '1px solid #2e2e2e', paddingTop: 12 },
+  gustoRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
+  gustoNombre: { fontSize: 13, color: '#f0ede8' },
+  gustoCtrl: { display: 'flex', alignItems: 'center', gap: 6 },
+  gustoStock: { minWidth: 28, textAlign: 'center', fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#e8c547' },
+  miniInput: { width: 64 },
+  addGusto: { display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 },
+  sinGusto: { display: 'flex', gap: 6, alignItems: 'center', borderTop: '1px solid #2e2e2e', paddingTop: 12 },
 }
