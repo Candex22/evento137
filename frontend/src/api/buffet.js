@@ -1,7 +1,5 @@
-const { getProductos, crearIngreso, ajustarStock } = require('../controllers/stockcontroller');
+import { get, post, patch } from './client'
 
-router.use(requireRole('buffet', 'administrador'));
-
-router.get('/productos', getProductos);
-router.post('/ingresos', crearIngreso);
-router.patch('/productos/:id/ajustar', ajustarStock);   // ← esta línea
+export const getProductos = ()                 => get('/buffet/productos')
+export const crearIngreso = (nombre, cantidad) => post('/buffet/ingresos', { nombre, cantidad })
+export const ajustarStock = (id, delta)        => patch(`/buffet/productos/${id}/ajustar`, { delta })
