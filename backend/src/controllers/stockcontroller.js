@@ -4,7 +4,7 @@ const pool = require('../config/db');
 async function getProductos(req, res) {
   try {
     const result = await pool.query(
-      'SELECT id_producto, nombre, stock, precio, created_at FROM producto ORDER BY nombre ASC'
+      'SELECT id_producto, nombre, stock, total_ingresado, precio, created_at FROM producto ORDER BY nombre ASC'
     );
     res.json(result.rows);
   } catch (err) {
@@ -34,11 +34,12 @@ async function crearIngreso(req, res) {
     // Upsert: inserta o suma al stock existente.
     // (xmax = 0) indica si la fila fue recién insertada (true) o actualizada (false).
     const prod = await client.query(
-      `INSERT INTO producto (nombre, stock)
-       VALUES ($1, $2)
+      `INSERT INTO producto (nombre, stock, total_ingresado)
+       VALUES ($1, $2, $2)
        ON CONFLICT (lower(nombre))
-       DO UPDATE SET stock = producto.stock + EXCLUDED.stock
-       RETURNING id_producto, nombre, stock, (xmax = 0) AS creado`,
+       DO UPDATE SET stock = producto.stock + EXCLUDED.stock,
+                     total_ingresado = producto.total_ingresado + EXCLUDED.total_ingresado
+       RETURNING id_producto, nombre, stock, total_ingresado, (xmax = 0) AS creado`,
       [nombre, cantidad]
     );
     const p = prod.rows[0];
@@ -62,6 +63,73 @@ async function crearIngreso(req, res) {
     await client.query('ROLLBACK');
     console.error('Error al cargar ingreso:', err);
     res.status(500).json({ error: 'Error al cargar el ingreso.' });
+  } finally {
+    client.release();
+  }
+}
+
+// PATCH /api/buffet/productos/:id/ajuste — ajusta el stock de a pasos (flechitas)
+// delta > 0 cuenta como ingreso (sube disponible y total).
+// delta < 0 cuenta como ajuste (baja disponible, NO toca el total). No deja negativo.
+async function ajustarStock(req, res) {
+  const id = parseInt(req.params.id, 10);
+  const delta = parseInt(req.body.delta, 10);
+
+  if (isNaN(id)) {
+    return res.status(400).json({ error: 'ID de producto inválido.' });
+  }
+  if (isNaN(delta) || delta === 0) {
+    return res.status(400).json({ error: 'El ajuste debe ser distinto de 0.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const cur = await client.query(
+      'SELECT id_producto, nombre, stock, total_ingresado FROM producto WHERE id_producto = $1 FOR UPDATE',
+      [id]
+    );
+    if (cur.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Producto no encontrado.' });
+    }
+    const p = cur.rows[0];
+
+    if (p.stock + delta < 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'El stock no puede quedar negativo.' });
+    }
+
+    const tipo = delta > 0 ? 'ingreso' : 'ajuste';
+
+    // El total solo sube con ingresos; los ajustes (bajas) no lo modifican.
+    const upd = delta > 0
+      ? await client.query(
+          `UPDATE producto SET stock = stock + $1, total_ingresado = total_ingresado + $1
+           WHERE id_producto = $2
+           RETURNING id_producto, nombre, stock, total_ingresado`,
+          [delta, id]
+        )
+      : await client.query(
+          `UPDATE producto SET stock = stock + $1
+           WHERE id_producto = $2
+           RETURNING id_producto, nombre, stock, total_ingresado`,
+          [delta, id]
+        );
+
+    await client.query(
+      `INSERT INTO movimiento_stock (id_producto, id_usuario, tipo, cantidad)
+       VALUES ($1, $2, $3, $4)`,
+      [id, req.session.id_usuario, tipo, Math.abs(delta)]
+    );
+
+    await client.query('COMMIT');
+    res.json({ message: 'Stock actualizado.', producto: upd.rows[0] });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error al ajustar stock:', err);
+    res.status(500).json({ error: 'Error al ajustar el stock.' });
   } finally {
     client.release();
   }
@@ -114,4 +182,4 @@ async function actualizarPrecio(req, res) {
   }
 }
 
-module.exports = { getProductos, crearIngreso, getMovimientos, actualizarPrecio };
+module.exports = { getProductos, crearIngreso, ajustarStock, getMovimientos, actualizarPrecio };

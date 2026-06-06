@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import PanelLayout from '../components/layout/panellayout'
-import { getProductos, crearIngreso } from '../api/buffet'
+import { getProductos, crearIngreso, ajustarStock } from '../api/buffet'
 import { useToast, ToastContainer } from '../hooks/usetoast'
 
 const NAV = [
@@ -14,6 +14,7 @@ export default function BuffetStockPage() {
   const [cantidad, setCantidad]   = useState('')
   const [saving, setSaving]       = useState(false)
   const [showSug, setShowSug]     = useState(false)
+  const [adjustingId, setAdjustingId] = useState(null)
   const { toasts, toast }         = useToast()
   const boxRef = useRef(null)
 
@@ -66,6 +67,34 @@ export default function BuffetStockPage() {
       toast.error(err.message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const ajustar = async (p, delta) => {
+    if (adjustingId) return
+    if (delta < 0 && p.stock <= 0) return
+    setAdjustingId(p.id_producto)
+    // Actualización optimista para que la flechita responda al toque
+    setProductos(prev => prev.map(x =>
+      x.id_producto === p.id_producto
+        ? {
+            ...x,
+            stock: x.stock + delta,
+            total_ingresado: delta > 0 ? x.total_ingresado + delta : x.total_ingresado,
+          }
+        : x
+    ))
+    try {
+      const res = await ajustarStock(p.id_producto, delta)
+      // Reconcilia con lo que devuelve el servidor
+      setProductos(prev => prev.map(x =>
+        x.id_producto === p.id_producto ? { ...x, ...res.producto } : x
+      ))
+    } catch (err) {
+      toast.error(err.message)
+      await load()
+    } finally {
+      setAdjustingId(null)
     }
   }
 
@@ -123,7 +152,7 @@ export default function BuffetStockPage() {
             {saving ? <span className="spinner" /> : 'Cargar ingreso'}
           </button>
         </form>
-        <p style={styles.hint}>Si el producto ya existe, se suma a su stock actual.</p>
+        <p style={styles.hint}>Si el producto ya existe, se suma a su stock actual. Usá las flechitas para ajustar de a uno.</p>
       </div>
 
       {loading ? (
@@ -136,13 +165,34 @@ export default function BuffetStockPage() {
           <div className="card" style={{ padding: 0 }}>
             <div className="table-wrap">
               <table>
-                <thead><tr><th>Producto</th><th style={{ textAlign: 'right' }}>Stock</th></tr></thead>
+                <thead><tr><th>Producto</th><th style={{ textAlign: 'center' }}>Stock</th><th style={{ textAlign: 'right' }}>Ajustar</th></tr></thead>
                 <tbody>
                   {productos.map(p => (
                     <tr key={p.id_producto}>
                       <td><strong>{p.nombre}</strong></td>
-                      <td style={{ textAlign: 'right' }}>
+                      <td style={{ textAlign: 'center' }}>
                         <span style={styles.stockNum}>{p.stock}</span>
+                        <span style={styles.stockTotal}>/{p.total_ingresado}</span>
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={styles.arrows}>
+                          <button
+                            type="button"
+                            style={{ ...styles.arrowBtn, ...((p.stock <= 0 || adjustingId === p.id_producto) ? styles.arrowDisabled : {}) }}
+                            onClick={() => ajustar(p, -1)}
+                            disabled={p.stock <= 0 || adjustingId === p.id_producto}
+                            aria-label={`Bajar stock de ${p.nombre}`}
+                            title="Bajar 1"
+                          >▾</button>
+                          <button
+                            type="button"
+                            style={{ ...styles.arrowBtn, ...(adjustingId === p.id_producto ? styles.arrowDisabled : {}) }}
+                            onClick={() => ajustar(p, +1)}
+                            disabled={adjustingId === p.id_producto}
+                            aria-label={`Subir stock de ${p.nombre}`}
+                            title="Subir 1"
+                          >▴</button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -168,6 +218,14 @@ const styles = {
   loading:   { display: 'flex', alignItems: 'center', gap: 10, color: '#5a5754', fontSize: 13, padding: 24 },
   sectionTitle: { fontSize: 14, fontWeight: 600, color: '#f0ede8', marginBottom: 12 },
   stockNum:  { fontFamily: "'DM Mono', monospace", fontSize: 15, fontWeight: 600, color: '#e89547' },
+  stockTotal:{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#5a5754' },
+  arrows:    { display: 'inline-flex', gap: 6, justifyContent: 'flex-end' },
+  arrowBtn:  {
+    width: 30, height: 30, lineHeight: '28px', textAlign: 'center',
+    background: '#181818', border: '1px solid #2e2e2e', borderRadius: 6,
+    color: '#f0ede8', fontSize: 14, cursor: 'pointer', padding: 0, userSelect: 'none',
+  },
+  arrowDisabled: { opacity: 0.4, cursor: 'not-allowed' },
   sugList: {
     position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20,
     marginTop: 4, padding: 4, listStyle: 'none',
