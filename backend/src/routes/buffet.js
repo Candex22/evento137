@@ -14,6 +14,5 @@ router.post('/productos/:id/gustos', agregarGusto);
 router.post('/ingresos', cargarStock);
 router.patch('/productos/:id/ajustar', ajustarStock);
 router.patch('/gustos/:id/ajustar', ajustarGusto);
-router.patch('/productos/:id/precio', actualizarPrecio);
 
 module.exports = router;

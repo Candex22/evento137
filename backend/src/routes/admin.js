@@ -14,7 +14,8 @@ const {
   cambiarRol,
 
 } = require('../controllers/userscontroller');
-const { getMovimientos, getProductosAdmin } = require('../controllers/stockcontroller');
+const { getMovimientos, getProductosAdmin, actualizarPrecio } = require('../controllers/stockcontroller');
+const { getCombosAdmin, crearCombo, actualizarCombo, eliminarCombo } = require('../controllers/combocontroller');
 const { historialAdmin } = require('../controllers/pedidocontroller');
 
 router.use(requireAuth, requireAdmin);
@@ -36,5 +37,10 @@ router.get('/movimientos', getMovimientos);
 
 router.get('/pedidos', historialAdmin);   // historial completo de pedidos resueltos
 router.get('/productos', getProductosAdmin);
+router.patch('/productos/:id/precio', actualizarPrecio);
 
+router.get('/combos', getCombosAdmin);
+router.post('/combos', crearCombo);
+router.put('/combos/:id', actualizarCombo);
+router.delete('/combos/:id', eliminarCombo);
 module.exports = router;

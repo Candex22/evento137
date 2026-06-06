@@ -27,7 +27,7 @@ async function getProductos(req, res) {
 async function getProductosAdmin(req, res) {
   try {
     const result = await pool.query(
-      `SELECT p.id_producto, p.nombre, p.tiene_gustos,
+      `SELECT p.id_producto, p.nombre, p.tiene_gustos, p.precio,
               CASE WHEN p.tiene_gustos
                 THEN COALESCE((SELECT SUM(g.stock) FROM gusto g WHERE g.id_producto = p.id_producto), 0)
                 ELSE p.stock END AS stock,
