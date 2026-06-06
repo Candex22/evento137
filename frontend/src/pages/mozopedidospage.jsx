@@ -4,7 +4,6 @@ import { getProductos, crearPedido, misPedidos } from '../api/mozo'
 import { useToast, ToastContainer } from '../hooks/usetoast'
 
 const NAV = [{ to: '/mozo', label: 'Pedidos', icon: '▦', end: true }]
-const ESTADO_BADGE = { confirmado: 'badge-active', pagado: 'badge-active', pendiente: 'badge-pending' }
 
 function fmtFecha(iso) {
   const d = new Date(iso)
@@ -14,11 +13,13 @@ function fmtFecha(iso) {
 
 export default function MozoPedidosPage() {
   const [productos, setProductos] = useState([])
-  const [sel, setSel] = useState({})    // { [id_producto]: { cantidad, gustos: { [id_gusto]: cant } } }
+  const [sel, setSel] = useState({})
   const [pedidos, setPedidos] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [nombrePedido, setNombrePedido] = useState('')
+  const [metodo, setMetodo] = useState('efectivo')
+  const [recibido, setRecibido] = useState('')
   const [saving, setSaving] = useState(false)
   const { toasts, toast } = useToast()
   const prevPago = useRef({})
@@ -29,16 +30,13 @@ export default function MozoPedidosPage() {
   const loadPedidos = async (notificar = false) => {
     try {
       const data = await misPedidos()
-      if (notificar) {
-        for (const p of data) {
-          if (prevPago.current[p.id_pedido] === false && p.pagado) toast.success(`Pedido "${p.nombre}" cobrado ✓`)
-        }
+      if (notificar) for (const p of data) {
+        if (prevPago.current[p.id_pedido] === false && p.pagado) toast.success(`Pedido "${p.nombre}" cobrado ✓`)
       }
       prevPago.current = Object.fromEntries(data.map(p => [p.id_pedido, p.pagado]))
       setPedidos(data)
-    } catch { /* polling silencioso */ }
+    } catch { /* silencioso */ }
   }
-
   useEffect(() => {
     (async () => { await Promise.all([loadProductos(), loadPedidos(false)]); setLoading(false) })()
     const t = setInterval(() => loadPedidos(true), 8000)
@@ -47,45 +45,50 @@ export default function MozoPedidosPage() {
 
   const setCantSimple = (id, val) => {
     const n = parseInt(val, 10)
-    setSel(s => {
-      const next = { ...s }
-      if (isNaN(n) || n <= 0) delete next[id]
-      else next[id] = { cantidad: n, gustos: {} }
-      return next
-    })
+    setSel(s => { const next = { ...s }; if (isNaN(n) || n <= 0) delete next[id]; else next[id] = { cantidad: n, gustos: {}, nombre: productos.find(p => p.id_producto === id)?.nombre, precio: productos.find(p => p.id_producto === id)?.precio }; return next })
   }
   const setCantGusto = (idProd, idGusto, val) => {
     const n = parseInt(val, 10)
+    const P = productos.find(p => p.id_producto === idProd)
     setSel(s => {
-      const prod = s[idProd] || { cantidad: 0, gustos: {} }
+      const prod = s[idProd] || { gustos: {} }
       const gustos = { ...prod.gustos }
       if (isNaN(n) || n <= 0) delete gustos[idGusto]; else gustos[idGusto] = n
       const cantidad = Object.values(gustos).reduce((a, b) => a + b, 0)
       const next = { ...s }
-      if (cantidad === 0) delete next[idProd]; else next[idProd] = { cantidad, gustos }
+      if (cantidad === 0) delete next[idProd]; else next[idProd] = { cantidad, gustos, nombre: P?.nombre, precio: P?.precio }
       return next
     })
   }
 
   const items = Object.entries(sel)
   const totalUnidades = items.reduce((a, [, v]) => a + v.cantidad, 0)
+  const totalPlata = items.reduce((a, [, v]) => a + v.cantidad * Number(v.precio || 0), 0)
+  const vuelto = metodo === 'efectivo' ? (Number(recibido) || 0) - totalPlata : 0
+  const faltaPlata = metodo === 'efectivo' && recibido !== '' && Number(recibido) < totalPlata
+
+  const abrir = () => {
+    if (items.length === 0) return toast.error('Agregá al menos un producto.')
+    setNombrePedido(''); setMetodo('efectivo'); setRecibido(''); setShowModal(true)
+  }
 
   const enviar = async () => {
     if (!nombrePedido.trim()) return toast.error('Poné un nombre al pedido.')
+    if (metodo === 'efectivo' && (recibido === '' || Number(recibido) < totalPlata)) {
+      return toast.error('Lo recibido no puede ser menor al total.')
+    }
     setSaving(true)
     try {
       const payload = items.map(([id_producto, v]) => ({
-        id_producto,
-        cantidad: v.cantidad,
+        id_producto, cantidad: v.cantidad,
         gustos: Object.entries(v.gustos).map(([id_gusto, cantidad]) => ({ id_gusto, cantidad })),
       }))
-      const res = await crearPedido(nombrePedido.trim(), payload)
+      const rec = metodo === 'efectivo' ? Number(recibido) : null
+      const res = await crearPedido(nombrePedido.trim(), payload, metodo, rec)
       toast.success(res.message)
-      setSel({}); setNombrePedido(''); setShowModal(false)
+      setSel({}); setShowModal(false)
       await Promise.all([loadProductos(), loadPedidos(false)])
-    } catch (err) {
-      toast.error(err.message)   // acá llega "Sin stock, pedido cancelado: ..."
-    } finally { setSaving(false) }
+    } catch (err) { toast.error(err.message) } finally { setSaving(false) }
   }
 
   return (
@@ -107,7 +110,7 @@ export default function MozoPedidosPage() {
                 <div key={p.id_producto} style={{ ...styles.prodCard, ...(cur ? styles.prodActive : {}) }}>
                   <div style={styles.prodTop}>
                     <span style={styles.prodNombre}>{p.nombre}</span>
-                    <span style={styles.prodStock}>stock {p.stock}</span>
+                    <span style={styles.prodStock}>${p.precio} · stock {p.stock}</span>
                   </div>
                   {p.tiene_gustos ? (
                     <div style={styles.gustos}>
@@ -132,8 +135,8 @@ export default function MozoPedidosPage() {
 
           {items.length > 0 && (
             <div style={styles.resumen}>
-              <span style={styles.resumenTxt}>{items.length} producto(s) · {totalUnidades} u.</span>
-              <button className="btn btn-primary" onClick={() => { setNombrePedido(''); setShowModal(true) }}>Confirmar pedido</button>
+              <span style={styles.resumenTxt}>{items.length} prod · {totalUnidades} u · ${totalPlata}</span>
+              <button className="btn btn-primary" onClick={abrir}>Confirmar pedido</button>
             </div>
           )}
 
@@ -147,11 +150,9 @@ export default function MozoPedidosPage() {
                     <span className={`badge ${p.pagado ? 'badge-active' : 'badge-pending'}`}>{p.pagado ? 'pagado' : 'a cobrar'}</span>
                   </div>
                   <div style={styles.chips}>
-                    {p.items.map((it, i) => (
-                      <span key={i} style={styles.chip}>{it.producto}{it.gusto ? ` ${it.gusto}` : ''} ×{it.cantidad}</span>
-                    ))}
+                    {p.items.map((it, i) => <span key={i} style={styles.chip}>{it.producto}{it.gusto ? ` ${it.gusto}` : ''} ×{it.cantidad}</span>)}
                   </div>
-                  <div style={styles.fecha}>{fmtFecha(p.created_at)} · ${p.total}</div>
+                  <div style={styles.fecha}>{fmtFecha(p.created_at)} · ${p.total} · {p.metodo_pago ?? '—'}</div>
                 </div>
               ))}
             </div>
@@ -162,14 +163,41 @@ export default function MozoPedidosPage() {
       {showModal && (
         <div style={styles.overlay} onClick={() => !saving && setShowModal(false)}>
           <div className="card" style={styles.modal} onClick={e => e.stopPropagation()}>
-            <h3 style={styles.modalTitle}>Nombre del pedido</h3>
-            <p style={styles.sub}>Para identificarlo al entregarlo (ej. "Mesa 5")</p>
+            <h3 style={styles.modalTitle}>Resumen del pedido</h3>
+
+            <div style={styles.resList}>
+              {items.map(([id, v]) => (
+                <div key={id} style={styles.resRow}>
+                  <span>{v.nombre} ×{v.cantidad}</span>
+                  <span style={styles.mono}>${v.cantidad * Number(v.precio || 0)}</span>
+                </div>
+              ))}
+            </div>
+            <div style={styles.totalRow}><span>Total</span><span style={styles.totalNum}>${totalPlata}</span></div>
+
             <input autoFocus value={nombrePedido} onChange={e => setNombrePedido(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && enviar()} placeholder="Ej. Mesa 5"
-              style={{ marginTop: 12, marginBottom: 16 }} disabled={saving} />
+              placeholder='Nombre del pedido (ej. "Mesa 5")' style={{ marginTop: 14 }} disabled={saving} />
+
+            <div style={styles.metodoRow}>
+              <button className={`btn btn-sm ${metodo === 'efectivo' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setMetodo('efectivo')}>Efectivo</button>
+              <button className={`btn btn-sm ${metodo === 'transferencia' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setMetodo('transferencia')}>Transferencia</button>
+            </div>
+
+            {metodo === 'efectivo' && (
+              <div style={{ marginTop: 12 }}>
+                <label style={styles.label}>¿Con cuánto paga?</label>
+                <input type="number" min="0" value={recibido} onChange={e => setRecibido(e.target.value)} placeholder="0" disabled={saving} />
+                {recibido !== '' && (
+                  faltaPlata
+                    ? <div style={styles.warn}>Falta plata: el total es ${totalPlata}</div>
+                    : <div style={styles.vuelto}>Vuelto: ${vuelto}</div>
+                )}
+              </div>
+            )}
+
             <div style={styles.modalBtns}>
               <button className="btn btn-ghost" onClick={() => setShowModal(false)} disabled={saving}>Cancelar</button>
-              <button className="btn btn-primary" onClick={enviar} disabled={saving}>
+              <button className="btn btn-primary" onClick={enviar} disabled={saving || faltaPlata}>
                 {saving ? <span className="spinner" /> : 'Confirmar'}
               </button>
             </div>
@@ -207,7 +235,16 @@ const styles = {
   chip: { fontSize: 12, color: '#9a9690', background: '#181818', border: '1px solid #2e2e2e', borderRadius: 6, padding: '3px 8px' },
   fecha: { fontSize: 11, color: '#5a5754' },
   overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 20 },
-  modal: { width: '100%', maxWidth: 380 },
-  modalTitle: { fontSize: 16, fontWeight: 600, color: '#f0ede8', marginBottom: 4 },
-  modalBtns: { display: 'flex', justifyContent: 'flex-end', gap: 10 },
+  modal: { width: '100%', maxWidth: 400 },
+  modalTitle: { fontSize: 16, fontWeight: 600, color: '#f0ede8', marginBottom: 12 },
+  resList: { display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 },
+  resRow: { display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#f0ede8' },
+  mono: { fontFamily: "'DM Mono', monospace", color: '#9a9690' },
+  totalRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #2e2e2e', paddingTop: 10, fontSize: 14, color: '#f0ede8' },
+  totalNum: { fontSize: 18, fontWeight: 600, color: '#e8c547', fontFamily: "'DM Mono', monospace" },
+  metodoRow: { display: 'flex', gap: 8, marginTop: 14 },
+  label: { display: 'block', fontSize: 12, color: '#9a9690', fontFamily: "'DM Mono', monospace", marginBottom: 6 },
+  warn: { marginTop: 8, fontSize: 12, color: '#d57b7b', background: '#1e1010', border: '1px solid #3a1a1a', borderRadius: 6, padding: '6px 10px' },
+  vuelto: { marginTop: 8, fontSize: 13, color: '#4caf7d', fontFamily: "'DM Mono', monospace" },
+  modalBtns: { display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 },
 }
