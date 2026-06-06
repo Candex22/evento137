@@ -1,4 +1,4 @@
-import { get, post, patch, del } from './client'
+import { get, post, patch, put, del } from './client'
 
 // Pendientes
 export const getPendientes    = () => get('/admin/pendientes')
@@ -21,3 +21,11 @@ export const getMovimientos = () => get('/admin/movimientos')
 
 // Historial de pedidos (todos, resueltos)
 export const getHistorialPedidos = () => get('/admin/pedidos')
+
+// Promos 
+export const actualizarPrecio   = (id, precio) => patch(`/admin/productos/${id}/precio`, { precio })
+export const getProductosAdmin  = ()           => get('/admin/productos')
+export const getCombos          = ()           => get('/admin/combos')
+export const crearCombo         = (combo)      => post('/admin/combos', combo)
+export const actualizarCombo    = (id, combo)  => put(`/admin/combos/${id}`, combo)
+export const eliminarCombo      = (id)         => del(`/admin/combos/${id}`)

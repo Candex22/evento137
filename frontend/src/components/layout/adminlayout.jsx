@@ -10,6 +10,7 @@ const NAV = [
   { to: '/admin/movimientos', label: 'Movimientos', icon: '⇅' },
   { to: '/admin/pedidos',     label: 'Historial',   icon: '⟲' },
   { to: '/admin/entradas',    label: 'Entradas',    icon: '◫' },
+  { to: '/admin/catalogo', label: 'Catálogo', icon: '◆' },
 ]
 
 export default function AdminLayout({ children, pendingCount = 0 }) {
