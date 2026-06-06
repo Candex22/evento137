@@ -194,4 +194,4 @@ async function actualizarPrecio(req, res) {
   }
 }
 
-module.exports = { getProductos, crearIngreso, ajustarStock, getMovimientos, actualizarPrecio };
+module.exports = { getProductos, crearIngreso, ajustarStock, getMovimientos, actualizarPrecio, getProductosAdmin };
