@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import PanelLayout from '../components/layout/PanelLayout'
+import PanelLayout from '../components/layout/panellayout'
 import {
   getProductos, crearProducto, agregarGusto, cargarStock, ajustarProducto, ajustarGusto,
 } from '../api/buffet'
