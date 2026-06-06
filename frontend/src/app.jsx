@@ -61,8 +61,8 @@ export default function App() {
         <Route path="/admin/movimientos" element={<RequireRole roles={['administrador']}><AdminMovimientosPage /></RequireRole>} />
         <Route path="/admin/pedidos"     element={<RequireRole roles={['administrador']}><AdminHistorialPage /></RequireRole>} />
         <Route path="/admin/entradas"    element={<RequireRole roles={['administrador']}><AdminEntradasPage /></RequireRole>} />
-        <Route path="/admin/catalogo" element={<RequireRole role="admin"><AdminCatalogoPage /></RequireRole>} />
-
+        <Route path="/admin/catalogo" element={<RequireRole roles={['administrador']}><AdminCatalogoPage /></RequireRole>} />
+        
         <Route path="/buffet"   element={<RequireRole roles={['buffet', 'administrador']}><BuffetStockPage /></RequireRole>} />
         <Route path="/mozo"     element={<RequireRole roles={['mozo', 'administrador']}><MozoPedidosPage /></RequireRole>} />
         <Route path="/cajero"   element={<RequireRole roles={['cajero', 'administrador']}><CajeroPedidosPage /></RequireRole>} />
